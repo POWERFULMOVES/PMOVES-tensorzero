@@ -30,6 +30,9 @@ WORKDIR /app
 
 EXPOSE 3003 3004
 
+RUN groupadd -g 1000 proxy && useradd -u 1000 -g proxy -m proxy
+USER proxy
+
 ENTRYPOINT ["provider-proxy"]
 
 CMD ["--help"]
