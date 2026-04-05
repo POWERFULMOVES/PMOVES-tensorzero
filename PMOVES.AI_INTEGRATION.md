@@ -1,93 +1,39 @@
-# PMOVES.AI Integration Guide for TensorZero Gateway
+# PMOVES.AI Integration Dossier
 
-## Integration Complete
+_Last updated: 2026-04-04_
 
-The PMOVES.AI integration template has been applied to TensorZero Gateway.
+## Module
+- Name: PMOVES-tensorzero
+- Path: PMOVES-tensorzero
 
-## Next Steps
+## Purpose in PMOVES.AI
+- Centralized LLM gateway with ClickHouse-backed observability and metrics.
 
-### 1. Customize Environment Variables
+## PMOVES Overlay Surface
+- pmoves-integrations/ overlay path (if used): _TBD_
+- Compose/profile wiring: _TBD_
+- Env/secret inputs: _TBD_
+- Auth/JWT requirements: _TBD_
 
-Edit the following files with your service-specific values:
+## Contracts and Topics
+- NATS subjects (if any): _TBD_
+- Supabase schema/tables touched (if any): _TBD_
+- MCP endpoints/skills (if any): _TBD_
 
-- `env.shared` - Base environment configuration
-- `env.tier-llm` - LLM tier specific configuration
-- `chit/secrets_manifest_v2.yaml` - Add your service's required secrets
+## Boot Order and Health
+- Bring-up dependency order: _TBD_
+- Health endpoints: _TBD_
+- Smoke targets: _TBD_
 
-### 2. Update Docker Compose
+## Hardening Notes
+- Image pinning / provenance: _TBD_
+- Secrets source (*_FILE / vault / GH env): _TBD_
+- Network/security policy constraints: _TBD_
 
-Add the PMOVES.AI environment anchor to your `docker-compose.yml`:
+## Source Documentation
+- Upstream docs entrypoint: README.md
+- PMOVES docs index reference: pmoves/docs/SUBMODULE_DOCS_DOSSIER.md
 
-```yaml
-services:
-  tensorzero-gateway:
-    <<: [*env-tier-llm, *pmoves-healthcheck]
-    # Your existing service configuration...
-```
-
-### 3. Integrate Health Check
-
-Add the health check endpoint to your service:
-
-```python
-from pmoves_health import add_custom_check, get_health_status
-
-@app.get("/healthz")
-async def health_check():
-    return await get_health_status()
-```
-
-### 4. Add Service Announcement
-
-Add NATS service announcement to your startup:
-
-```python
-from pmoves_announcer import announce_service
-
-@app.on_event("startup")
-async def startup():
-    await announce_service(
-        slug="tensorzero-gateway",
-        name="TensorZero Gateway",
-        url=f"http://tensorzero-gateway:3030",
-        port=3030,
-        tier="llm"
-    )
-```
-
-### 5. Test Integration
-
-```bash
-# Test health check
-curl http://localhost:3030/healthz
-
-# Verify environment variables loaded
-docker compose exec tensorzero-gateway env | grep PMOVES
-
-# Verify NATS announcement
-nats sub "services.announce.v1"
-```
-
-## Service Details
-
-- **Name:** TensorZero Gateway
-- **Slug:** tensorzero-gateway
-- **Tier:** llm
-- **Port:** 3030
-- **Health Check:** http://localhost:3030/healthz
-- **NATS Enabled:** True
-- **GPU Enabled:** False
-
-## Files Created
-
-- `env.shared` - Base PMOVES.AI environment
-- `env.tier-llm` - Tier-specific environment
-- `chit/secrets_manifest_v2.yaml` - CHIT secrets configuration
-- `pmoves_health/` - Health check module
-- `pmoves_announcer/` - NATS service announcer
-- `pmoves_registry/` - Service registry client
-- `docker-compose.pmoves.yml` - PMOVES.AI YAML anchors
-
-## Support
-
-For questions or issues, see the PMOVES.AI documentation.
+## Owner / Audit
+- Owning lane: _TBD_
+- Last integration audit run: 2026-04-04
