@@ -6,6 +6,74 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 on:
   workflow_dispatch:
   workflow_call:
+    # F-04 FIX: Explicit secrets declarations for safe caller passing
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AZURE_AI_FOUNDRY_API_KEY:
+        required: false
+      AZURE_API_KEY:
+        required: false
+      AZURE_OPENAI_EASTUS2_API_KEY:
+        required: false
+      AZURE_OPENAI_DEPLOYMENT_ID:
+        required: false
+      DEEPSEEK_API_KEY:
+        required: false
+      FIREWORKS_ACCOUNT_ID:
+        required: false
+      FIREWORKS_API_KEY:
+        required: false
+      GCP_STORAGE_ACCESS_KEY_ID:
+        required: false
+      GCP_STORAGE_SECRET_ACCESS_KEY:
+        required: false
+      GOOGLE_AI_STUDIO_API_KEY:
+        required: false
+      GROQ_API_KEY:
+        required: false
+      HYPERBOLIC_API_KEY:
+        required: false
+      MISTRAL_API_KEY:
+        required: false
+      MODAL_KEY:
+        required: false
+      MODAL_SECRET:
+        required: false
+      OPENAI_API_KEY:
+        required: true
+      OPENROUTER_API_KEY:
+        required: false
+      R2_ACCESS_KEY_ID:
+        required: false
+      R2_SECRET_ACCESS_KEY:
+        required: false
+      SGLANG_API_KEY:
+        required: false
+      TGI_API_KEY:
+        required: false
+      TOGETHER_API_KEY:
+        required: false
+      VLLM_API_BASE:
+        required: false
+      VLLM_API_KEY:
+        required: false
+      VOYAGE_API_KEY:
+        required: false
+      XAI_API_KEY:
+        required: false
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+      GCP_JWT_KEY:
+        required: true
+      SLACK_BOT_TOKEN:
+        required: false
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 

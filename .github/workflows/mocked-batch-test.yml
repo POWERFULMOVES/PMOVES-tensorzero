@@ -31,6 +31,16 @@ env:
 on:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      DOCKERHUB_USERNAME:
+        description: "Docker Hub username for pulling images"
+        required: true
+      DOCKERHUB_TOKEN:
+        description: "Docker Hub token for authentication"
+        required: true
+      GCP_JWT_KEY:
+        description: "GCP JWT key for GCS access"
+        required: true
 
 permissions:
   contents: read
