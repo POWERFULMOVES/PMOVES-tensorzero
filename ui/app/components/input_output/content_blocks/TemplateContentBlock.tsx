@@ -16,10 +16,7 @@ export interface TemplateContentBlockProps {
 }
 
 // Schema for validating `block.arguments`
-const templateArgumentsSchema = z.record(
-  z.string(),
-  ZodJsonValueSchema.optional(),
-);
+const templateArgumentsSchema = z.record(z.string(), ZodJsonValueSchema);
 
 export function TemplateContentBlock({
   block,
@@ -69,6 +66,7 @@ export function TemplateContentBlock({
         allowedLanguages={["json"]}
         value={formattedJson}
         readOnly={!isEditing}
+        dataTestId="template-arguments-editor"
         ariaLabel={
           block.name === "system" ? "System template editor" : undefined
         }

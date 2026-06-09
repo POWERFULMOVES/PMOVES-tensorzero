@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+  data,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -37,7 +38,18 @@ import {
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { AppProviders } from "./providers/app-providers";
+import { EntitySheet } from "./components/entity-sheet/EntitySheet";
 import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
+import {
+  loadFeatureFlags,
+  type FeatureFlags,
+} from "./utils/feature_flags.server";
+import {
+  apiKeyCookie,
+  getApiKeyFromRequest,
+  isSecureRequest,
+  runWithRequest,
+} from "./utils/api-key-override.server";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -57,26 +69,44 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
-export const middleware: Route.MiddlewareFunction[] = [readOnlyMiddleware];
+const apiKeyMiddleware: Route.MiddlewareFunction = async (
+  { request },
+  next,
+) => {
+  return runWithRequest(request, next);
+};
+
+export const middleware: Route.MiddlewareFunction[] = [
+  apiKeyMiddleware,
+  readOnlyMiddleware,
+];
 
 interface LoaderData {
   config: UiConfig;
   isReadOnly: boolean;
   autopilotAvailable: boolean;
+  featureFlags: FeatureFlags;
   infraError: ClassifiedError | null;
 }
 
-export async function loader(): Promise<LoaderData> {
+export async function loader({ request }: Route.LoaderArgs) {
   // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
   const isReadOnly = isReadOnlyMode();
+  const featureFlags = loadFeatureFlags();
   try {
     // Fetch config and autopilot availability in parallel
     const [config, autopilotAvailable] = await Promise.all([
       getConfig(),
       checkAutopilotAvailable(),
     ]);
-    return { config, isReadOnly, autopilotAvailable, infraError: null };
+    return {
+      config,
+      isReadOnly,
+      autopilotAvailable,
+      featureFlags,
+      infraError: null,
+    };
   } catch (e) {
     // Graceful degradation for infrastructure errors:
     // Return fallback state so UI renders with dismissible error dialog.
@@ -86,16 +116,30 @@ export async function loader(): Promise<LoaderData> {
         config: EMPTY_CONFIG,
         isReadOnly,
         autopilotAvailable: false,
+        featureFlags,
         infraError: { type: InfraErrorType.GatewayUnavailable },
       };
     }
     if (isAuthenticationError(e)) {
-      return {
+      const loaderData: LoaderData = {
         config: EMPTY_CONFIG,
         isReadOnly,
         autopilotAvailable: false,
+        featureFlags,
         infraError: { type: InfraErrorType.GatewayAuthFailed },
       };
+      // Clear stale cookie so the auth dialog starts fresh
+      if (await getApiKeyFromRequest(request)) {
+        return data(loaderData, {
+          headers: {
+            "Set-Cookie": await apiKeyCookie.serialize("", {
+              maxAge: 0,
+              secure: isSecureRequest(request),
+            }),
+          },
+        });
+      }
+      return loaderData;
     }
     if (isClickHouseError(e)) {
       const message = e instanceof Error ? e.message : undefined;
@@ -103,6 +147,7 @@ export async function loader(): Promise<LoaderData> {
         config: EMPTY_CONFIG,
         isReadOnly,
         autopilotAvailable: false,
+        featureFlags,
         infraError: {
           type: InfraErrorType.ClickHouseUnavailable,
           message,
@@ -151,6 +196,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
           <Outlet />
         </ContentLayout>
       </div>
+      <EntitySheet />
       {infraError && (
         <ErrorDialog
           open={dialogOpen}

@@ -15,11 +15,12 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
-import { PageErrorContent } from "~/components/ui/error";
+import { LayoutErrorBoundary, PageErrorContent } from "~/components/ui/error";
 import {
   getPostgresClient,
   isPostgresAvailable,
 } from "~/utils/postgres.server";
+import { requireValidApiKeyIfEnabled } from "~/utils/auth.server";
 import AuthTable from "./AuthTable";
 import { AuthActions } from "./AuthActions";
 import { GenerateApiKeyModal } from "./GenerateApiKeyModal";
@@ -34,6 +35,11 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import type { KeyInfo } from "~/types/tensorzero";
+import {
+  CUSTOM_EXPIRATION_REQUIRED_ERROR,
+  getExpirationDateError,
+  isExpirationPreset,
+} from "./expiration";
 
 export const handle: RouteHandle = {
   crumb: () => ["TensorZero API Keys"],
@@ -63,6 +69,7 @@ function ApiKeysContentSkeleton() {
             <TableRow>
               <TableHead className="w-0 whitespace-nowrap">Public ID</TableHead>
               <TableHead>Description</TableHead>
+              <TableHead className="w-0 whitespace-nowrap">Expires</TableHead>
               <TableHead className="w-0 whitespace-nowrap">Created</TableHead>
               <TableHead className="w-0"></TableHead>
             </TableRow>
@@ -75,6 +82,9 @@ function ApiKeysContentSkeleton() {
                 </TableCell>
                 <TableCell>
                   <Skeleton className="h-4 w-48" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20" />
                 </TableCell>
                 <TableCell>
                   <Skeleton className="h-4 w-20" />
@@ -137,6 +147,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     };
   }
 
+  await requireValidApiKeyIfEnabled();
+
   return {
     postgresAvailable: true as const,
     apiKeysData: fetchApiKeys(limit, offset),
@@ -144,6 +156,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  await requireValidApiKeyIfEnabled();
+
   const formData = await request.formData();
   const actionType = formData.get("action");
 
@@ -155,8 +169,58 @@ export async function action({ request }: Route.ActionArgs) {
           ? description.trim()
           : null;
 
+      const expirationPreset = formData.get("expiration_preset");
+      const expirationPresetStr =
+        expirationPreset &&
+        typeof expirationPreset === "string" &&
+        expirationPreset.trim()
+          ? expirationPreset.trim()
+          : null;
+
+      if (
+        expirationPresetStr !== null &&
+        !isExpirationPreset(expirationPresetStr)
+      ) {
+        return data({ error: "Invalid expiration preset" }, { status: 400 });
+      }
+
+      const expiresAt = formData.get("expires_at");
+      const expiresAtStr =
+        expiresAt && typeof expiresAt === "string" && expiresAt.trim()
+          ? expiresAt.trim()
+          : null;
+
+      if (expirationPresetStr === "custom" && expiresAtStr === null) {
+        return data(
+          {
+            fieldErrors: {
+              expiresAt: CUSTOM_EXPIRATION_REQUIRED_ERROR,
+            },
+          },
+          { status: 400 },
+        );
+      }
+
+      if (expiresAtStr !== null) {
+        const expiresAtError = getExpirationDateError(expiresAtStr);
+
+        if (expiresAtError) {
+          return data(
+            {
+              fieldErrors: {
+                expiresAt: expiresAtError,
+              },
+            },
+            { status: 400 },
+          );
+        }
+      }
+
       const postgresClient = await getPostgresClient();
-      const apiKey = await postgresClient.createApiKey(descriptionStr);
+      const apiKey = await postgresClient.createApiKey(
+        descriptionStr,
+        expiresAtStr,
+      );
 
       return {
         apiKey,
@@ -314,6 +378,5 @@ export default function ApiKeysPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-  return <PageErrorContent error={error} />;
+  return <LayoutErrorBoundary error={error} />;
 }
