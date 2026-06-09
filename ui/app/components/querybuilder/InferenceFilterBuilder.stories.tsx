@@ -104,6 +104,8 @@ const mockConfig: UiConfig = {
   evaluations: {},
   model_names: [],
   config_hash: "test-config-hash",
+  config_in_database: false,
+  auth_enabled: false,
 };
 
 export const Default: Story = {

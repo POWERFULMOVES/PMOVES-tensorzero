@@ -2,7 +2,7 @@
 name = "tensorzero-examples-data-extraction-ner"
 version = "0.0.0"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "altair",
     "ipykernel",
@@ -11,3 +11,7 @@ dependencies = [
     "tensorzero",
     "tqdm",
 ]
+
+[tool.uv]
+exclude-newer = "3 days"
+exclude-newer-package = { tensorzero = false }

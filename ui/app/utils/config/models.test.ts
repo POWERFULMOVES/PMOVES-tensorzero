@@ -17,20 +17,22 @@ describe("dump_optimizer_output", () => {
             discard_unknown_chunks: false,
             timeouts: {
               non_streaming: {
-                total_ms: null,
+                total_ms: undefined,
               },
               streaming: {
-                ttft_ms: null,
+                ttft_ms: undefined,
+                total_ms: undefined,
               },
             },
           },
         },
         timeouts: {
           non_streaming: {
-            total_ms: null,
+            total_ms: undefined,
           },
           streaming: {
-            ttft_ms: null,
+            ttft_ms: undefined,
+            total_ms: undefined,
           },
         },
         skip_relay: false,
@@ -57,14 +59,16 @@ describe("dump_optimizer_output", () => {
             timeouts: {} as TimeoutsConfig,
             api_type: "chat_completions",
             provider_tools: [],
+            content_type_overrides: {},
           },
         },
         timeouts: {
           non_streaming: {
-            total_ms: null,
+            total_ms: undefined,
           },
           streaming: {
-            ttft_ms: null,
+            ttft_ms: undefined,
+            total_ms: undefined,
           },
         },
         skip_relay: false,

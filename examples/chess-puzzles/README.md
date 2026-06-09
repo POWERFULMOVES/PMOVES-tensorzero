@@ -50,8 +50,8 @@ The function includes a baseline variant with GPT-4o Mini (OpenAI), as well as b
 ### Prerequisites
 
 1. Install Docker.
-2. Install Python 3.9+.
-3. Install the Python dependencies with `pip install -r requirements.txt`.
+2. Install Python 3.10+.
+3. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 4. Generate an API key for OpenAI (`OPENAI_API_KEY`).
 
 ### Setup
@@ -80,5 +80,5 @@ For example, you could try mixing candidates that use different LLMs.
 ## Next Steps
 
 You now have a ClickHouse database with a ton of trajectories of LLMs trying to solve chess puzzles.
-Consider our library of [recipes](https://www.tensorzero.com/docs/recipes) for ideas on how to use this dataset to improve further!
+Consider our [optimization workflows](https://www.tensorzero.com/docs/optimization) for ideas on how to use this dataset to improve further!
 Since this data ended up in ClickHouse, we also included a test set at `data/lichess_easy_puzzles_test.csv` (use `dryrun=True` to avoid leaking it) to evaluate variants on held-out data.

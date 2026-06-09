@@ -12,30 +12,38 @@ env:
     {"custom_id": "request-1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "gpt-4", "messages": [{"role": "user", "content": "What is the capital of France?"}], "max_tokens": 100}}
 
 permissions:
-  contents: read
-  actions: read
+  contents: read # Required for checkout or repository metadata reads.
+  actions: read # Required to read workflow run, cache, or artifact metadata.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   openai-batch:
+    name: openai-batch
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.9"
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |
-          pip install openai requests
+          pip install openai==2.30.0 requests==2.33.0
 
       - name: Create batch input file
         run: |
           mkdir -p batch_inputs
-          echo '${{ env.BATCH_INPUT }}' > batch_inputs/input.jsonl
+          printf '%s\n' "$BATCH_INPUT" > batch_inputs/input.jsonl
 
       - name: OpenAI Batch Inference
         env:
@@ -93,20 +101,24 @@ jobs:
           rm -rf batch_inputs/
 
   google-vertex-batch:
+    name: google-vertex-batch
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.9"
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |
-          pip install google-cloud-aiplatform google-cloud-storage
+          pip install google-cloud-aiplatform==1.143.0 google-cloud-storage==3.10.1
 
       - name: Google Vertex AI Batch Inference
         env:
@@ -115,7 +127,7 @@ jobs:
           GOOGLE_CLOUD_REGION: us-east1
         run: |
           # Create service account key file
-          echo '${{ secrets.GCP_JWT_KEY }}' > /tmp/gcp-key.json
+          printf '%s\n' "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > /tmp/gcp-key.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json
 
           python -c "
@@ -181,20 +193,24 @@ jobs:
           rm -f /tmp/gcp-key.json
 
   anthropic-batch:
+    name: anthropic-batch
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.9"
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |
-          pip install anthropic
+          pip install anthropic==0.86.0
 
       - name: Anthropic Batch Inference
         env:
@@ -235,9 +251,11 @@ jobs:
           "
 
   log-completion:
+    name: log-completion
     if: github.repository == 'tensorzero/tensorzero'
     needs: [openai-batch, google-vertex-batch, anthropic-batch]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Log completion
         run: |

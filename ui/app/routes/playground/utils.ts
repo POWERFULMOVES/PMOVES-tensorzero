@@ -1,7 +1,7 @@
-import type { ZodDisplayInput } from "~/utils/clickhouse/common";
 import { z } from "zod";
 import type {
   Datapoint as TensorZeroDatapoint,
+  Input,
   VariantInfo,
   ClientInferenceParams,
   FunctionConfig,
@@ -9,7 +9,6 @@ import type {
   StaticToolConfig,
 } from "~/types/tensorzero";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
-import { getExtraInferenceOptions } from "~/utils/feature_flags";
 import { data } from "react-router";
 import { TensorZeroServerError } from "~/utils/tensorzero/errors";
 import type { QueryKey } from "@tanstack/react-query";
@@ -141,7 +140,7 @@ export interface ClientInferenceInputArgs {
   variant: PlaygroundVariantInfo;
   functionName: string;
   datapoint: TensorZeroDatapoint;
-  input: ZodDisplayInput;
+  input: Input;
   functionConfig: FunctionConfig;
   toolsConfig: { [key in string]?: StaticToolConfig };
 }
@@ -157,10 +156,10 @@ export function preparePlaygroundInferenceRequest(
     variant: variantInferenceInfo.variant,
     editedVariantInfo: variantInferenceInfo.editedVariantInfo,
   });
-  const extraOptions = getExtraInferenceOptions();
+  // Note: Extra inference options (like cache settings) are applied server-side
+  // in the /api/tensorzero/inference route, not here on the client.
   return {
     ...request,
-    ...extraOptions,
     dryrun: variant.type === "edited",
   };
 }
