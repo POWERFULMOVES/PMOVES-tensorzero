@@ -278,11 +278,11 @@ export function VariantEditor({
               <CardTitle>Timeouts</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Non-Streaming Total (ms)</Label>
                   <div className="text-sm">
-                    {variantInfo.timeouts.non_streaming.total_ms !== null ? (
+                    {variantInfo.timeouts.non_streaming?.total_ms != null ? (
                       <div className="font-mono text-sm">
                         {variantInfo.timeouts.non_streaming.total_ms.toString()}
                       </div>
@@ -294,9 +294,21 @@ export function VariantEditor({
                 <div className="space-y-2">
                   <Label>Streaming TTFT (ms)</Label>
                   <div className="text-sm">
-                    {variantInfo.timeouts.streaming.ttft_ms !== null ? (
+                    {variantInfo.timeouts.streaming?.ttft_ms != null ? (
                       <div className="font-mono text-sm">
                         {variantInfo.timeouts.streaming.ttft_ms.toString()}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">Default</span>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Streaming Total (ms)</Label>
+                  <div className="text-sm">
+                    {variantInfo.timeouts.streaming?.total_ms != null ? (
+                      <div className="font-mono text-sm">
+                        {variantInfo.timeouts.streaming.total_ms.toString()}
                       </div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>

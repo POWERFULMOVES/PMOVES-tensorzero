@@ -6,12 +6,11 @@ TODO(shuyangli): Figure out a way to generate the HTTP client, possibly from Sch
 
 import { z } from "zod";
 import { BaseTensorZeroClient } from "./base-client";
-import {
-  ZodJsonValueSchema,
-  type ZodStoragePath,
-} from "~/utils/clickhouse/common";
+import { ZodJsonValueSchema } from "~/utils/clickhouse/common";
 import { logger } from "~/utils/logger";
 import type {
+  ApplyConfigTomlRequest,
+  ApplyConfigTomlResponse,
   AutopilotStatusResponse,
   CacheEnabledMode,
   CloneDatapointsResponse,
@@ -37,6 +36,7 @@ import type {
   EvaluationRunStatsResponse,
   FeedbackRow,
   FunctionInferenceCount,
+  GetConfigTomlResponse,
   GetDatapointCountResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
@@ -45,6 +45,8 @@ import type {
   GetEvaluationResultsResponse,
   GetEvaluationRunInfosResponse,
   GetEvaluationStatisticsResponse,
+  GetEvaluationUsageStatisticsResponse,
+  GetEvaluationRunMetadataResponse,
   GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
   GetFunctionThroughputByVariantResponse,
@@ -54,6 +56,7 @@ import type {
   GetModelLatencyResponse,
   GetModelUsageResponse,
   GetVariantSamplingProbabilitiesResponse,
+  GetVariantUsageResponse,
   GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
   GetWorkflowEvaluationRunEpisodesWithFeedbackResponse,
@@ -88,9 +91,12 @@ import type {
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
   UpdateDatapointsResponse,
+  ValidateConfigTomlRequest,
+  ValidateConfigTomlResponse,
   VariantPerformancesResponse,
   ClientInferenceParams,
   InferenceResponse,
+  ResolveUuidResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -284,54 +290,6 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetModelLatencyResponse;
-  }
-
-  /**
-   * Inserts a datapoint from an existing inference with a given ID and setting for where to get the output from.
-   * @param datasetName - The name of the dataset to insert the datapoint into
-   * @param inferenceId - The ID of the existing inference to use as a base
-   * @param outputKind - How to handle the output field: inherit from inference, use demonstration, or none
-   * @returns A promise that resolves with the created datapoint response containing the new ID
-   * @throws Error if validation fails or the request fails
-   */
-  async createDatapointFromInferenceLegacy(
-    datasetName: string,
-    inferenceId: string,
-    outputKind: "inherit" | "demonstration" | "none" = "inherit",
-    functionName: string,
-    variantName: string,
-    episodeId: string,
-  ): Promise<DatapointResponse> {
-    if (!datasetName || typeof datasetName !== "string") {
-      throw new Error("Dataset name must be a non-empty string");
-    }
-
-    if (!inferenceId || typeof inferenceId !== "string") {
-      throw new Error("Inference ID must be a non-empty string");
-    }
-
-    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints`;
-
-    const request = {
-      inference_id: inferenceId,
-      output: outputKind,
-      function_name: functionName,
-      variant_name: variantName,
-      episode_id: episodeId,
-    };
-
-    const response = await this.fetch(endpoint, {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-
-    const body = await response.json();
-    return DatapointResponseSchema.parse(body);
   }
 
   /**
@@ -579,8 +537,8 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     return (await response.json()) as GetDatapointCountResponse;
   }
 
-  async getObject(storagePath: ZodStoragePath): Promise<string> {
-    const endpoint = `/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
+  async getObject(path: string): Promise<string> {
+    const endpoint = `/internal/object_storage?path=${encodeURIComponent(path)}`;
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
@@ -670,6 +628,57 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as UiConfig;
+  }
+
+  async getUiConfigByHash(hash: string): Promise<UiConfig> {
+    const response = await this.fetch(
+      `/internal/ui_config/${encodeURIComponent(hash)}`,
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as UiConfig;
+  }
+
+  async getConfigToml(): Promise<GetConfigTomlResponse> {
+    const response = await this.fetch("/internal/config_toml", {
+      method: "GET",
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetConfigTomlResponse;
+  }
+
+  async applyConfigToml(
+    request: ApplyConfigTomlRequest,
+  ): Promise<ApplyConfigTomlResponse> {
+    const response = await this.fetch("/internal/config_toml/apply", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ApplyConfigTomlResponse;
+  }
+
+  async validateConfigToml(
+    request: ValidateConfigTomlRequest,
+  ): Promise<ValidateConfigTomlResponse> {
+    const response = await this.fetch("/internal/config_toml/validate", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ValidateConfigTomlResponse;
   }
 
   /**
@@ -790,6 +799,33 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetFunctionThroughputByVariantResponse;
+  }
+
+  /**
+   * Gets variant usage timeseries data for a function.
+   * @param functionName - The function to get variant usage for
+   * @param timeWindow - The time window granularity
+   * @param maxPeriods - Maximum number of periods to return
+   * @returns A promise that resolves with variant usage data
+   * @throws Error if the request fails
+   */
+  async getVariantUsageTimeseries(
+    functionName: string,
+    timeWindow: TimeWindow,
+    maxPeriods: number,
+  ): Promise<GetVariantUsageResponse> {
+    const searchParams = new URLSearchParams({
+      time_window: timeWindow,
+      max_periods: maxPeriods.toString(),
+    });
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant_usage?${searchParams.toString()}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetVariantUsageResponse;
   }
 
   /**
@@ -1432,25 +1468,27 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   }
 
   /**
-   * Searches evaluation runs by ID or variant name.
-   * @param evaluationName - The name of the evaluation
-   * @param functionName - The name of the function being evaluated
+   * Searches evaluation runs by run ID, evaluation name, dataset name, or variant name.
    * @param query - The search query (case-insensitive)
+   * @param functionName - Function name filter
+   * @param evaluationName - Optional evaluation name filter
    * @param limit - Maximum number of results to return (default: 100)
    * @param offset - Number of results to skip (default: 0)
    * @returns A promise that resolves with the search results
    * @throws Error if the request fails
    */
   async searchEvaluationRuns(
-    evaluationName: string,
-    functionName: string,
     query: string,
+    functionName: string,
+    evaluationName?: string,
     limit: number = 100,
     offset: number = 0,
   ): Promise<SearchEvaluationRunsResponse> {
     const searchParams = new URLSearchParams();
-    searchParams.append("evaluation_name", evaluationName);
     searchParams.append("function_name", functionName);
+    if (evaluationName) {
+      searchParams.append("evaluation_name", evaluationName);
+    }
     searchParams.append("query", query);
     searchParams.append("limit", limit.toString());
     searchParams.append("offset", offset.toString());
@@ -1643,10 +1681,59 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   }
 
   /**
+   * Gets aggregated usage statistics (tokens, cost, processing time) for evaluation runs.
+   * @param functionName - The name of the function being evaluated
+   * @param functionType - The type of function: "chat" or "json"
+   * @param evaluationRunIds - Array of evaluation run UUIDs to query
+   * @returns A promise that resolves with aggregated usage statistics per run
+   * @throws Error if the request fails
+   */
+  async getEvaluationUsageStatistics(
+    functionName: string,
+    functionType: "chat" | "json",
+    evaluationRunIds: string[],
+  ): Promise<GetEvaluationUsageStatisticsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("function_name", functionName);
+    searchParams.append("function_type", functionType);
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/usage_statistics?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationUsageStatisticsResponse;
+  }
+
+  /**
+   * Gets metadata for an evaluation run from the database.
+   * @param evaluationRunIds - The UUIDs of the evaluation runs
+   * @returns A promise that resolves with the run metadata
+   * @throws Error if the request fails or the run is not found
+   */
+  async getEvaluationRunMetadata(
+    evaluationRunIds: string[],
+  ): Promise<GetEvaluationRunMetadataResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    const endpoint = `/internal/evaluations/run_metadata?${searchParams.toString()}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationRunMetadataResponse;
+  }
+
+  /**
    * Gets paginated evaluation results across one or more evaluation runs.
-   * @param evaluationName - The name of the evaluation
    * @param evaluationRunIds - Array of evaluation run UUIDs to query
    * @param options - Optional parameters for filtering and pagination
+   * @param options.evaluationName - Optional name of the evaluation (resolved from DB if omitted)
    * @param options.datapointId - Optional datapoint ID to filter results to a specific datapoint
    * @param options.limit - Maximum number of datapoints to return (default: 100)
    * @param options.offset - Number of datapoints to skip (default: 0)
@@ -1654,17 +1741,19 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    * @throws Error if the request fails
    */
   async getEvaluationResults(
-    evaluationName: string,
     evaluationRunIds: string[],
     options: {
+      evaluationName?: string;
       datapointId?: string;
       limit?: number;
       offset?: number;
     } = {},
   ): Promise<GetEvaluationResultsResponse> {
-    const { datapointId, limit = 100, offset = 0 } = options;
+    const { evaluationName, datapointId, limit = 100, offset = 0 } = options;
     const searchParams = new URLSearchParams();
-    searchParams.append("evaluation_name", evaluationName);
+    if (evaluationName) {
+      searchParams.append("evaluation_name", evaluationName);
+    }
     searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
     if (datapointId) {
       searchParams.append("datapoint_id", datapointId);
@@ -1707,9 +1796,6 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     params: RunEvaluationStreamingParams,
   ): Promise<void> {
     const {
-      evaluationConfig,
-      functionConfig,
-      evaluationName,
       datasetName,
       datapointIds,
       variantName,
@@ -1719,12 +1805,10 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       maxDatapoints,
       precisionTargets,
       onEvent,
+      signal,
     } = params;
 
-    const requestBody: RunEvaluationRequest = {
-      evaluation_config: evaluationConfig,
-      function_config: functionConfig,
-      evaluation_name: evaluationName,
+    const requestBodyBase = {
       dataset_name: datasetName,
       datapoint_ids: datapointIds,
       variant_name: variantName,
@@ -1734,6 +1818,19 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       max_datapoints: maxDatapoints,
       precision_targets: precisionTargets,
     };
+    const requestBody: RunEvaluationRequest =
+      "evaluationConfig" in params
+        ? {
+            ...requestBodyBase,
+            evaluation_config: params.evaluationConfig,
+            function_config: params.functionConfig,
+            evaluation_name: params.evaluationName,
+          }
+        : {
+            ...requestBodyBase,
+            function_name: params.functionName,
+            evaluator_names: params.evaluatorNames,
+          };
 
     const response = await this.fetch("/internal/evaluations/run", {
       method: "POST",
@@ -1742,6 +1839,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
         Accept: "text/event-stream",
       },
       body: JSON.stringify(requestBody),
+      signal,
     });
 
     if (!response.ok) {
@@ -1863,18 +1961,47 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     }
     return (await response.json()) as OptimizationJobInfo;
   }
+
+  /**
+   * Resolves a UUID to determine what type(s) of object it represents.
+   * @param id - The UUID to resolve
+   * @returns A promise that resolves with the resolved object types
+   * @throws Error if the request fails
+   */
+  async resolveUuid(id: string): Promise<ResolveUuidResponse> {
+    const endpoint = `/internal/resolve_uuid/${encodeURIComponent(id)}`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ResolveUuidResponse;
+  }
 }
 
 /**
  * Parameters for running an evaluation via SSE streaming.
  */
-export interface RunEvaluationStreamingParams {
+type RunEvaluationStreamingNamedParams = {
   /** The evaluation configuration */
   evaluationConfig: EvaluationConfig;
   /** The function configuration for output schema validation */
   functionConfig: EvaluationFunctionConfig;
   /** Name of the evaluation */
   evaluationName: string;
+};
+
+type RunEvaluationStreamingEvaluatorParams = {
+  /** Function name to evaluate */
+  functionName: string;
+  /** Top-level evaluator names to run */
+  evaluatorNames: string[];
+};
+
+export type RunEvaluationStreamingParams = (
+  | RunEvaluationStreamingNamedParams
+  | RunEvaluationStreamingEvaluatorParams
+) & {
   /** Name of the dataset to evaluate (optional) */
   datasetName?: string;
   /** Specific datapoint IDs to evaluate (optional) */
@@ -1893,4 +2020,6 @@ export interface RunEvaluationStreamingParams {
   precisionTargets?: Record<string, number>;
   /** Callback for SSE events */
   onEvent: (event: EvaluationRunEvent) => void;
-}
+  /** Optional signal to abort the request */
+  signal?: AbortSignal;
+};

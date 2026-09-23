@@ -92,22 +92,24 @@ export const Completed: Story = {
               model_name:
                 "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
               timeouts: {
-                non_streaming: { total_ms: null },
-                streaming: { ttft_ms: null },
+                non_streaming: { total_ms: undefined },
+                streaming: { ttft_ms: undefined, total_ms: undefined },
               },
               discard_unknown_chunks: false,
               api_key_location: null,
               api_type: "chat_completions",
               include_encrypted_reasoning: false,
               provider_tools: [],
+              content_type_overrides: {},
             },
           },
           timeouts: {
             non_streaming: {
-              total_ms: null,
+              total_ms: undefined,
             },
             streaming: {
-              ttft_ms: null,
+              ttft_ms: undefined,
+              total_ms: undefined,
             },
           },
           skip_relay: false,
@@ -131,9 +133,50 @@ export const Error: Story = {
   args: {
     status: {
       status: "failed",
-      message: "Training data validation failed: Invalid format in line 42",
+      // OpenAI returns generic "failed" status in message, actual error details in error field
+      message: "failed",
       error: "Training data validation failed: Invalid format in line 42",
     } as OptimizationJobInfo,
+    formData: baseFormData,
+    result: null,
+    jobHandle: {
+      type: "openai_sft",
+      job_id: "ftjob-abc123xyz789",
+      job_url: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
+      job_api_url:
+        "https://api.openai.com/v1/fine_tuning/jobs/ftjob-abc123xyz789",
+      credential_location: null,
+    } as OptimizationJobHandle,
+  },
+};
+
+export const ErrorWithOnlyMessage: Story = {
+  name: "Error with only message (no error field)",
+  args: {
+    status: {
+      status: "failed",
+      message: "JobStateFailed",
+      error: null,
+    } as OptimizationJobInfo,
+    formData: baseFormData,
+    result: null,
+    jobHandle: {
+      type: "fireworks_sft",
+      job_url: "https://fireworks.ai/jobs/fw-job-abc123",
+      job_path: "accounts/my-account/fineTuningJobs/fw-job-abc123",
+      deploy_after_training: false,
+    } as OptimizationJobHandle,
+  },
+};
+
+export const ErrorWithNoDetails: Story = {
+  name: "Error with no details (fallback)",
+  args: {
+    status: {
+      status: "failed",
+      message: null,
+      error: null,
+    } as unknown as OptimizationJobInfo,
     formData: baseFormData,
     result: null,
     jobHandle: {
@@ -162,14 +205,15 @@ export const LongJobId: Story = {
               model_name:
                 "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
               timeouts: {
-                non_streaming: { total_ms: null },
-                streaming: { ttft_ms: null },
+                non_streaming: { total_ms: undefined },
+                streaming: { ttft_ms: undefined, total_ms: undefined },
               },
               discard_unknown_chunks: false,
               api_key_location: null,
               api_type: "chat_completions",
               include_encrypted_reasoning: false,
               provider_tools: [],
+              content_type_overrides: {},
             },
           },
           timeouts: {
@@ -178,6 +222,7 @@ export const LongJobId: Story = {
             },
             streaming: {
               ttft_ms: 300000n,
+              total_ms: 300000n,
             },
           },
           skip_relay: false,

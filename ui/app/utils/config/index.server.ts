@@ -8,16 +8,16 @@
  * browser clients.
  */
 
+import { redirect } from "react-router";
 import type { FunctionConfig, UiConfig } from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { DEFAULT_FUNCTION } from "../constants";
+import { hexToDecimal } from "../common";
+import { getEnv } from "../env.server";
 import { logger } from "../logger";
 
 // Poll interval in milliseconds (5 seconds)
 const CONFIG_HASH_POLL_INTERVAL_MS = 5_000;
-
-// TTL for autopilot availability cache in milliseconds (30 seconds)
-const AUTOPILOT_CACHE_TTL_MS = 30_000;
 
 // Track if polling has been started
 let pollingStarted = false;
@@ -30,35 +30,26 @@ export async function loadConfig(): Promise<UiConfig> {
   return await client.getUiConfig();
 }
 
+/**
+ * In cookie-auth deployments (no TENSORZERO_API_KEY), the gateway credential
+ * comes from a per-request cookie via AsyncLocalStorage. A process-global
+ * cache populated under one request's cookie would (a) leak that user's
+ * config to later unauthenticated requests and (b) suppress the 401 the
+ * root loader uses to render the API-key dialog. Skip caching in that mode.
+ */
+function isCookieAuthMode(): boolean {
+  return !getEnv().TENSORZERO_API_KEY;
+}
+
 let configCache: UiConfig | undefined = undefined;
-let autopilotAvailableCache: { value: boolean; timestamp: number } | undefined =
-  undefined;
 
 /**
- * Checks if autopilot is available by querying the gateway's autopilot status endpoint.
- * This endpoint checks if TENSORZERO_AUTOPILOT_API_KEY is configured on the gateway
- * without making any database queries or pinging the autopilot server.
- * The result is cached with a TTL.
+ * Autopilot UI is hard-disabled. Revert this function (see git history) to
+ * restore the gateway status check + TTL cache.
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function checkAutopilotAvailable(): Promise<boolean> {
-  // Check if cache is valid (exists and not expired)
-  if (
-    autopilotAvailableCache !== undefined &&
-    Date.now() - autopilotAvailableCache.timestamp < AUTOPILOT_CACHE_TTL_MS
-  ) {
-    return autopilotAvailableCache.value;
-  }
-
-  try {
-    const client = getTensorZeroClient();
-    const status = await client.getAutopilotStatus();
-    autopilotAvailableCache = { value: status.enabled, timestamp: Date.now() };
-    return status.enabled;
-  } catch (error) {
-    // For network errors, assume unavailable but don't cache
-    logger.warn("Failed to check autopilot status:", error);
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -92,9 +83,13 @@ async function checkConfigHash(): Promise<void> {
  * Starts the periodic config hash polling.
  * This is called automatically when getConfig() is first called.
  * The polling runs once for the entire server process.
+ *
+ * No-op in cookie-auth mode: the setInterval tick has no request context, so
+ * its `getEffectiveApiKey()` would return undefined and every poll would 401.
+ * There is also no shared cache to invalidate in that mode.
  */
 function startConfigHashPolling(): void {
-  if (pollingStarted) {
+  if (pollingStarted || isCookieAuthMode()) {
     return;
   }
   pollingStarted = true;
@@ -120,14 +115,31 @@ const defaultFunctionConfig: FunctionConfig = {
   parallel_tool_calls: null,
   description:
     "This is the default function for TensorZero. This function is used when you call a model directly without specifying a function name. It has no variants preconfigured because they are generated dynamically at inference time based on the model being called.",
-  experimentation: { type: "uniform" },
+  experimentation: {
+    base: { type: "static", candidate_variants: [], fallback_variants: [] },
+    namespaces: {},
+  },
 };
+
+async function loadAndDecorateConfig(): Promise<UiConfig> {
+  const freshConfig = await loadConfig();
+  // eslint-disable-next-line no-restricted-syntax
+  freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
+  return freshConfig;
+}
 
 /**
  * Gets the config, using the cache if available.
  * Also starts the background polling for config hash changes if not already started.
+ *
+ * In cookie-auth mode, no caching: each call hits the gateway with the
+ * current request's cookie so credential checks aren't bypassed.
  */
 export async function getConfig(): Promise<UiConfig> {
+  if (isCookieAuthMode()) {
+    return loadAndDecorateConfig();
+  }
+
   // Start polling for config hash changes (only starts once)
   startConfigHashPolling();
 
@@ -137,12 +149,16 @@ export async function getConfig(): Promise<UiConfig> {
   }
 
   // Cache doesn't exist or was invalidated, load it.
-  const freshConfig = await loadConfig();
-  // eslint-disable-next-line no-restricted-syntax
-  freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
-
-  configCache = freshConfig;
+  configCache = await loadAndDecorateConfig();
   return configCache;
+}
+
+/**
+ * Clears all cached config state so the next read fetches from the gateway.
+ */
+export function invalidateConfigCache(): void {
+  configCache = undefined;
+  snapshotConfigCache.clear();
 }
 
 /**
@@ -172,6 +188,81 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
 }
 
 // ============================================================================
+// Snapshot-aware config resolution from request
+// ============================================================================
+
+/**
+ * Reads `?snapshot_hash` from the request URL and resolves the appropriate
+ * config — either the historical snapshot or the current config.
+ *
+ * If the snapshot hash matches the current config hash (after converting
+ * hex→decimal), strips the param via redirect so the URL stays clean.
+ * Otherwise resolves the historical snapshot config (falling back to
+ * current on error).
+ */
+export async function getConfigFromRequest(
+  request: Request,
+): Promise<UiConfig> {
+  const url = new URL(request.url);
+  const snapshotHash = url.searchParams.get("snapshot_hash");
+  if (!snapshotHash) return getConfig();
+
+  const currentConfig = await getConfig();
+  const decimalHash = hexToDecimal(snapshotHash);
+
+  // Fast path: if the URL hash matches current config, strip it.
+  if (currentConfig.config_hash === decimalHash) {
+    url.searchParams.delete("snapshot_hash");
+    throw redirect(url.pathname + url.search);
+  }
+
+  return getConfigForSnapshot(snapshotHash);
+}
+
+// ============================================================================
+// Snapshot config fetching
+// ============================================================================
+
+const snapshotConfigCache = new Map<string, UiConfig>();
+const MAX_SNAPSHOT_CACHE_SIZE = 50;
+
+/**
+ * Fetches the config for a given snapshot hash. If the hash matches the current
+ * config, returns that. Otherwise fetches the historical config from the gateway
+ * and caches it. Falls back to the current config on error.
+ */
+export async function getConfigForSnapshot(
+  snapshotHash: string | undefined | null,
+): Promise<UiConfig> {
+  if (!snapshotHash) return getConfig();
+
+  const decimalHash = hexToDecimal(snapshotHash);
+
+  const currentConfig = await getConfig();
+  if (currentConfig.config_hash === decimalHash) return currentConfig;
+
+  const cached = snapshotConfigCache.get(decimalHash);
+  if (cached) return cached;
+
+  try {
+    const client = getTensorZeroClient();
+    const snapshotConfig = await client.getUiConfigByHash(decimalHash);
+    // eslint-disable-next-line no-restricted-syntax
+    snapshotConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
+
+    if (snapshotConfigCache.size >= MAX_SNAPSHOT_CACHE_SIZE) {
+      const firstKey = snapshotConfigCache.keys().next().value;
+      if (firstKey) snapshotConfigCache.delete(firstKey);
+    }
+    snapshotConfigCache.set(decimalHash, snapshotConfig);
+    return snapshotConfig;
+  } catch (error) {
+    logger.warn(`Failed to fetch config for snapshot ${snapshotHash}:`, error);
+    return currentConfig;
+  }
+}
+
+// ============================================================================
 // Testing utilities - exported for testing only
 // ============================================================================
 
@@ -181,8 +272,8 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
  */
 export function _resetForTesting(): void {
   configCache = undefined;
-  autopilotAvailableCache = undefined;
   pollingStarted = false;
+  snapshotConfigCache.clear();
 }
 
 /**

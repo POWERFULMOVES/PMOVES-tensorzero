@@ -10,7 +10,7 @@ This directory contains the code for the **[Metrics & Feedback](https://www.tens
 export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
 ```
 
-2. Launch the TensorZero Gateway, the TensorZero UI, and a local ClickHouse database:
+2. Launch the TensorZero Gateway, the TensorZero UI, and a local Postgres database:
 
 ```bash
 docker compose up
@@ -21,17 +21,16 @@ docker compose up
 <details>
 <summary><b>Python</b></summary>
 
-a. Install the dependencies:
+a. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
 
 ```bash
-# We recommend using Python 3.9+ and a virtual environment
-pip install -r requirements.txt
+uv sync
 ```
 
 b. Run the example:
 
 ```bash
-python main.py
+uv run main.py
 ```
 
 </details>
