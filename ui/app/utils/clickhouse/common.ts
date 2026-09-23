@@ -38,7 +38,7 @@ export type ZodLegacyTextInput = z.infer<typeof legacyTextSchema>;
 export const templateSchema = z.object({
   type: z.literal("template"),
   name: z.string(),
-  arguments: z.record(ZodJsonValueSchema.optional()),
+  arguments: z.record(ZodJsonValueSchema),
 });
 export type ZodTemplate = z.infer<typeof templateSchema>;
 
@@ -54,7 +54,7 @@ export type ZodDisplayTextInput = z.infer<typeof displayTextInputSchema>;
 export const displayTemplateSchema = z.object({
   type: z.literal("template"),
   name: z.string(),
-  arguments: z.record(ZodJsonValueSchema.optional()),
+  arguments: z.record(ZodJsonValueSchema),
 });
 export type ZodDisplayTemplate = z.infer<typeof displayTemplateSchema>;
 
@@ -154,12 +154,9 @@ export const base64FileSchema = z.object({
 export type ZodBase64File = z.infer<typeof base64FileSchema>;
 
 export const resolvedBase64FileSchema = z.object({
-  data: z
-    .string()
-    .url()
-    .refine((url) => url.startsWith("data:"), {
-      message: "Data URL must start with 'data:'",
-    }),
+  data: z.string().refine((data) => !data.startsWith("data:"), {
+    message: "Resolved file data must be raw base64, not a data URL",
+  }),
   mime_type: z.string(),
 });
 export type ZodResolvedBase64File = z.infer<typeof resolvedBase64FileSchema>;
@@ -265,24 +262,6 @@ export const inputMessageSchema = z
   })
   .strict();
 export type ZodInputMessage = z.infer<typeof inputMessageSchema>;
-
-export const displayModelInferenceInputMessageContentSchema =
-  z.discriminatedUnion("type", [
-    displayTextInputSchema,
-    toolCallContentSchema,
-    toolResultContentSchema,
-    resolvedFileContentSchema,
-    resolvedFileContentErrorSchema,
-    thoughtContentSchema,
-  ]);
-
-export const displayModelInferenceInputMessageSchema = z.object({
-  role: roleSchema,
-  content: z.array(displayModelInferenceInputMessageContentSchema),
-});
-export type ZodDisplayModelInferenceInputMessage = z.infer<
-  typeof displayModelInferenceInputMessageSchema
->;
 
 export const displayInputMessageSchema = z
   .object({

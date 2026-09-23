@@ -7,7 +7,7 @@ import { useHydrated } from "~/hooks/use-hydrated";
 import type { IconProps } from "../icons/Icons";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 select-none",
+  "cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 select-none",
   {
     variants: {
       variant: {
@@ -18,7 +18,9 @@ const buttonVariants = cva(
         outline:
           "border border-input text-fg bg-bg hover:bg-bg-hover hover:text-accent-foreground",
         destructiveOutline:
-          "border border-input text-fg bg-bg hover:bg-red-50 hover:text-red-400 hover:border-red-400",
+          "border border-red-300 text-red-600 bg-bg hover:bg-red-50",
+        successOutline:
+          "border border-green-500 text-green-700 bg-green-50 hover:bg-green-100",
         secondary: "bg-bg-hover text-secondary-foreground hover:bg-bg-hover/80",
         ghost: "hover:bg-accent text-fg hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
@@ -26,6 +28,7 @@ const buttonVariants = cva(
       size: {
         default: "h-9 px-4 py-2",
         sm: "h-8 rounded-md px-3 text-sm",
+        xs: "h-6 rounded px-2 text-xs",
         lg: "h-10 rounded-md px-8",
         icon: "h-9 w-9",
         iconSm: "h-8 w-8",
@@ -50,7 +53,8 @@ const ButtonContext = React.createContext<ButtonContextValue | null>(null);
 ButtonContext.displayName = "ButtonContext";
 
 export interface ButtonProps
-  extends React.ComponentPropsWithRef<"button">,
+  extends
+    React.ComponentPropsWithRef<"button">,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   /**
@@ -83,10 +87,7 @@ const Button: React.FC<ButtonProps> = ({
 
   return (
     <Comp
-      className={cn(
-        "cursor-pointer",
-        buttonVariants({ variant, size, className }),
-      )}
+      className={cn(buttonVariants({ variant, size, className }))}
       disabled={isDisabled}
       {...props}
     >
@@ -110,6 +111,7 @@ const buttonIconVariants = cva(null, {
     size: {
       default: "h-4 w-4",
       sm: "h-3 w-3",
+      xs: "h-3 w-3",
       lg: "h-5 w-5",
       icon: "h-4 h-4",
       iconSm: "h-3 w-3",
@@ -122,7 +124,8 @@ const buttonIconVariants = cva(null, {
 });
 
 interface ButtonIconProps
-  extends Omit<IconProps, "size">,
+  extends
+    Omit<IconProps, "size">,
     Omit<VariantProps<typeof buttonIconVariants>, "size"> {
   as: React.ElementType<IconProps>;
 }

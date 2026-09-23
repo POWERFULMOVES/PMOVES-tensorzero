@@ -15,19 +15,12 @@ import { logger } from "~/utils/logger";
 import type {
   ClientInferenceParams,
   Input,
-  InputMessage,
-  InputMessageContent,
   ContentBlockChatOutput,
   JsonInferenceOutput,
   ChatInferenceDatapoint,
   JsonInferenceDatapoint,
   InferenceResponse,
 } from "~/types/tensorzero";
-import type {
-  ZodInput,
-  ZodInputMessage,
-  ZodInputMessageContent,
-} from "~/utils/clickhouse/common";
 import { v7 } from "uuid";
 
 interface InferenceActionError {
@@ -179,85 +172,6 @@ export function useInferenceActionFetcher() {
   } satisfies ActionFetcher;
 }
 
-// Convert Input type from a datapoint to the Zod Input type used in the UI
-export function datapointInputToZodInput(input: Input): ZodInput {
-  return {
-    system: input.system ?? undefined,
-    messages: input.messages.map(inputMessageToZodInputMessage),
-  };
-}
-
-function inputMessageToZodInputMessage(message: InputMessage): ZodInputMessage {
-  return {
-    role: message.role,
-    content: message.content.map(inputMessageContentToZodInputMessageContent),
-  };
-}
-
-function inputMessageContentToZodInputMessageContent(
-  content: InputMessageContent,
-): ZodInputMessageContent {
-  switch (content.type) {
-    case "raw_text":
-    case "template":
-    case "text":
-    case "thought":
-    case "tool_result":
-    case "unknown":
-      return content;
-    case "tool_call":
-      if ("raw_arguments" in content) {
-        // This is an InferenceResponseToolCall.
-        return {
-          type: "tool_call",
-          name: content.raw_name,
-          arguments: content.raw_arguments,
-          id: content.id,
-        };
-      } else {
-        return {
-          type: "tool_call",
-          name: content.name,
-          arguments: content.arguments,
-          id: content.id,
-        };
-      }
-    case "file": {
-      // Handle the StoragePath conversion properly
-      if (content.file_type === "url" || content.file_type === "base64") {
-        // The file should've been stored, but here they are not. This shouldn't happen.
-        throw new Error(
-          "URL and base64 files should not be passed to `tensorZeroStoredContentToInputContent`. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
-        );
-      }
-      const storageKind = content.storage_path.kind;
-      let convertedKind;
-
-      if (storageKind.type === "s3_compatible") {
-        // Ensure bucket_name is not null
-        convertedKind = {
-          ...storageKind,
-          bucket_name: storageKind.bucket_name || "",
-        };
-      } else {
-        convertedKind = storageKind;
-      }
-
-      return {
-        type: "file",
-        file: {
-          url: content.source_url ?? null,
-          mime_type: content.mime_type,
-        },
-        storage_path: {
-          path: content.storage_path.path,
-          kind: convertedKind,
-        },
-      };
-    }
-  }
-}
-
 interface InferenceActionArgs {
   source: "inference";
   resource: StoredInference;
@@ -322,11 +236,12 @@ export function prepareInferenceActionRequest(
     credentials: new Map(),
     cache_options: {
       max_age_s: null,
-      enabled: "on",
+      enabled: "off",
     },
     include_original_response: false, // deprecated
     include_raw_response: false,
     include_raw_usage: false,
+    include_aggregated_response: false,
   };
 
   // Prepare request based on source and function type
@@ -428,6 +343,35 @@ export type VariantResponseInfo =
       output?: JsonInferenceOutput;
       usage?: InferenceUsage;
     };
+
+/**
+ * Extracts the demonstration value from inference output.
+ * For JSON inferences, returns the parsed output.
+ * For chat inferences, returns the raw output array.
+ */
+export function extractDemonstrationValue(
+  output: ContentBlockChatOutput[] | JsonInferenceOutput,
+) {
+  // JSON output has 'parsed' property, chat output is an array
+  if ("parsed" in output) {
+    return output.parsed;
+  }
+  return output;
+}
+
+/**
+ * Prepares demonstration feedback value from variant output.
+ * Returns the parsed output for JSON inferences, or the raw output for chat inferences.
+ */
+export function prepareDemonstrationFromVariantOutput(
+  variantOutput: VariantResponseInfo,
+) {
+  const output = variantOutput.output;
+  if (output === undefined) {
+    return undefined;
+  }
+  return extractDemonstrationValue(output);
+}
 
 function convertTemplate(
   template: PathWithContents | null,

@@ -562,7 +562,7 @@ export class TensorZeroServerError extends Error {
       super(message, { status: HttpStatusCode.BAD_REQUEST });
     }
   };
-  static ModelProvidersExhausted = class ModelProvidersExhausted extends TensorZeroServerError {
+  static AllModelProvidersFailed = class AllModelProvidersFailed extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
     }
@@ -700,7 +700,7 @@ export function getErrorLabel(type: InfraErrorType): string {
     case InfraErrorType.GatewayUnavailable:
       return "Gateway Connection Error";
     case InfraErrorType.GatewayAuthFailed:
-      return "Auth Error";
+      return "Authentication Required";
     case InfraErrorType.GatewayEndpointNotFound:
       return "Route Error";
     case InfraErrorType.ClickHouseUnavailable:
@@ -824,59 +824,77 @@ export interface PageErrorInfo {
 
 /**
  * Returns user-friendly error info for page-level errors.
- * Maps status codes to sanitized messages - never exposes raw server strings.
+ * Uses custom error.data message if provided (string), otherwise falls back
+ * to generic status-based messages.
  */
 export function getPageErrorInfo(error: unknown): PageErrorInfo {
   if (isRouteErrorResponse(error)) {
+    // Use custom message from error.data if it's a string
+    const customMessage =
+      typeof error.data === "string" && error.data.length > 0
+        ? error.data
+        : null;
+
     switch (error.status) {
       case 400:
         return {
           title: "Bad Request",
           message:
+            customMessage ??
             "The request was invalid. Please check your input and try again.",
           status: 400,
         };
       case 401:
         return {
           title: "Unauthorized",
-          message: "Authentication is required to access this resource.",
+          message:
+            customMessage ??
+            "Authentication is required to access this resource.",
           status: 401,
         };
       case 403:
         return {
           title: "Forbidden",
-          message: "You don't have permission to access this resource.",
+          message:
+            customMessage ??
+            "You don't have permission to access this resource.",
           status: 403,
         };
       case 404:
         return {
           title: "Not Found",
-          message: "The requested resource could not be found.",
+          message:
+            customMessage ?? "The requested resource could not be found.",
           status: 404,
         };
       case 500:
         return {
           title: "Server Error",
-          message: "The server encountered an error. Please try again later.",
+          message:
+            customMessage ??
+            "The server encountered an error. Please try again later.",
           status: 500,
         };
       case 502:
         return {
           title: "Bad Gateway",
-          message: "Unable to reach the server. Please try again later.",
+          message:
+            customMessage ??
+            "Unable to reach the server. Please try again later.",
           status: 502,
         };
       case 503:
         return {
           title: "Service Unavailable",
           message:
+            customMessage ??
             "The service is temporarily unavailable. Please try again later.",
           status: 503,
         };
       default:
         return {
           title: "Error",
-          message: "An unexpected error occurred.",
+          message: customMessage ?? "An unexpected error occurred.",
           status: error.status,
         };
     }

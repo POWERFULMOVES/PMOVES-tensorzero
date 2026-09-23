@@ -93,46 +93,30 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Enable `pre-commit` in your repository: `pre-commit install`
 - Install Docker [→](https://docs.docker.com/get-docker/)
 - Install `uv` [→](https://docs.astral.sh/uv/)
-- Install Python (3.9+) (e.g. `uv python install 3.9` + )
+- Install Python (3.10+) (e.g. `uv python install 3.10` + )
 - Install Node.js (we use v24.13.0) and `npm` [→](https://nodejs.org/en)
-- Install pnpm `npm install -g pnpm@10` [→](https://pnpm.io/installation)
+- Install pnpm `npm install -g pnpm@10.15.0` [→](https://pnpm.io/installation)
 
 **macOS users:** If you see Rust build errors about missing dynamic libraries for Python, set up a Python virtual environment at `tensorzero/.venv` (e.g. `uv venv` from the `tensorzero` directory)
 This ensures the correct Python libraries are available for the build.
 
-### Optimization Recipes
-
-We maintain optimization recipes as Jupyter notebooks in `recipes/`.
-These notebooks serve as manual workflows for optimizing (e.g. fine-tuning) TensorZero functions.
-
-Jupyter notebooks are notoriously hard to test, maintain, and review.
-To address these issues, each notebook has an accompanying Python script ending in `_nb.py` that serves the same purpose.
-We automatically keep these two files in sync using [Jupytext](https://jupytext.readthedocs.io/en/latest/).
-
-To convert a notebook to a script, run `ci/compile-notebook-to-script.sh path/to/notebook.ipynb`.
-To convert a script to a notebook, run `ci/compile-script-to-notebook.sh path/to/script_nb.py`.
-
-In `pre-commit` and CI, we check that the notebooks match the relevant scripts using a script `ci/compile-check-notebooks.sh`.
-
 ### Tests
 
-#### Rust
-
-##### Unit Tests
+#### Rust Unit Tests
 
 ```bash
 cargo test-unit
 ```
 
-##### E2E Tests
+#### Rust E2E Tests with ClickHouse
 
-1. Launch the test ClickHouse database
+1. Launch the test containers
 
    ```bash
-   docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+   docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
    ```
 
-2. Set the relevant environment variables. See `examples/production-deployment/.env.example` for the full list.
+2. Set the relevant environment variables (`TENSORZERO_CLICKHOUSE_URL` and model provider API keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.). See the [credential docs](https://www.tensorzero.com/docs/deployment/tensorzero-gateway#set-up-model-provider-credentials) for the full list.
 
 3. Launch the gateway in testing mode
 
@@ -151,17 +135,37 @@ cargo test-unit
 >
 > If your changes don't affect every provider, you can run a subset of tests with `cargo test-e2e xyz`, which will only run tests with `xyz` in their name.
 
+#### Rust E2E Tests with Postgres
+
+1. Launch the test containers
+
+   ```bash
+   docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
+   ```
+
+2. Set the relevant environment variables (`TENSORZERO_CLICKHOUSE_URL` and model provider API keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.). See the [credential docs](https://www.tensorzero.com/docs/deployment/tensorzero-gateway#set-up-model-provider-credentials) for the full list.
+
+3. Launch the gateway in testing mode
+
+   ```bash
+   cargo run-e2e-postgres
+   ```
+
+4. Run the E2E tests
+   ```bash
+   TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres cargo test-e2e
+   ```
+
 #### Python
 
 1. Launch ClickHouse and the gateway in E2E testing mode (see above).
 
 2. Go to the relevant directory (e.g. `cd clients/python`)
 
-3. Create a virtual environment and install the dependencies
+3. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv).
 
    ```bash
-   uv venv
-   uv pip sync requirements.txt
+   uv sync
    ```
 
 4. Run the tests
@@ -197,13 +201,31 @@ To set it up, follow these steps from the repository's root directory:
 2. Build the internal N-API client for TensorZero using `pnpm -r build`. If you have changed your Rust code, you may also have to run `pnpm build-bindings`.
 3. Create a `ui/fixtures/.env` following the `ui/fixtures/.env.example`.
 4. Create a `ui/.env` following the `ui/.env.example`, or set the environment variables from that file in your shell before running the dev script.
-5. Launch the dependencies: `docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate`.
-   You can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway.
+5. Launch the dependencies:
+
+   ```bash
+   # For local development without R2 credentials (downloads via public HTTP):
+   TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS=1 docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate
+
+   # With R2 credentials (faster S3 sync, used in CI):
+   docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate
+   ```
+
+   You can omit the `--build --force-recreate` flags to skip the build step, but they ensure you're using the latest gateway.
+
 6. Launch the development server: `pnpm ui:dev`
 
 Separately, you can run headless tests with `pnpm ui:test` and Playwright tests with `pnpm ui:test:e2e` (the latter will require a `pnpm exec playwright install`).
 
 We also maintain a Docker Compose for e2e tests `ui/fixtures/docker-compose.e2e.yml` that is used in CI for the Playwright tests. This file uses a different configuration that mandates credentials for image fetching.
+
+##### Autopilot Tests (Internal Only)
+
+> [!NOTE]
+>
+> The Autopilot feature depends on a closed-source internal API. The tests in `ui/e2e_tests/autopilot/` require access to the private `autopilot` repository and cannot be run by external contributors. These tests are excluded by default and run in CI via repository dispatch from the autopilot repo.
+
+For internal contributors with access to the autopilot repository, see `ui/AGENTS.md` for detailed instructions on running the autopilot development environment and tests.
 
 ### Advanced
 
